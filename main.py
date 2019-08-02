@@ -36,6 +36,7 @@ flags.DEFINE_integer("ckpt_freq", 200, "save checkpoint every this many iteratio
 flags.DEFINE_integer("z_dim", 100, "dimensions of z")
 flags.DEFINE_string("z_dist", "uniform_signed", "'normal01' or 'uniform_unsigned' or uniform_signed")
 flags.DEFINE_boolean("G_img_sum", False, "Save generator image summaries in log")
+flags.DEFINE_boolean("gpu_auto_mixed_precision", False, "Enable GPU automatic mixed precision training")
 #flags.DEFINE_integer("generate_test_images", 100, "Number of images to generate during test. [100]")
 FLAGS = flags.FLAGS
 
@@ -69,7 +70,10 @@ def main(_):
   with open(os.path.join(FLAGS.out_dir, 'FLAGS.json'), 'w') as f:
     flags_dict = {k:FLAGS[k].value for k in FLAGS}
     json.dump(flags_dict, f, indent=4, sort_keys=True, ensure_ascii=False)
-  
+
+  if os.environ.get('TF_ENABLE_AUTO_MIXED_PRECISION', default='0') == '1' or FLAGS.gpu_auto_mixed_precision:
+    print("=============Enabling GPU Automatic Mixed Precision Inference=============")
+    tf.train.experimental.enable_mixed_precision_graph_rewrite(tf.train.AdamOptimizer())
 
   #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
   run_config = tf.ConfigProto()

@@ -26,7 +26,8 @@ class DCGAN(object):
          y_dim=None, z_dim=100, gf_dim=64, df_dim=64,
          gfc_dim=1024, dfc_dim=1024, c_dim=3, dataset_name='default',
          max_to_keep=1,
-         input_fname_pattern='*.jpg', checkpoint_dir='ckpts', sample_dir='samples', out_dir='./out', data_dir='./data'):
+         input_fname_pattern='*.jpg', checkpoint_dir='ckpts', sample_dir='samples', out_dir='./out', data_dir='./data',
+         gpu_auto_mixed_precision=False):
     """
 
     Args:
@@ -39,6 +40,7 @@ class DCGAN(object):
       gfc_dim: (optional) Dimension of gen units for for fully connected layer. [1024]
       dfc_dim: (optional) Dimension of discrim units for fully connected layer. [1024]
       c_dim: (optional) Dimension of image color. For grayscale input, set to 1. [3]
+      gpu_auto_mixed_precision: (optional) Enable GPU automatic mixed precision training
     """
     self.sess = sess
     self.crop = crop
@@ -59,6 +61,8 @@ class DCGAN(object):
 
     self.gfc_dim = gfc_dim
     self.dfc_dim = dfc_dim
+
+    self.gpu_auto_mixed_precision = gpu_auto_mixed_precision
 
     # batch normalization : deals with poor initialization helps gradient flow
     self.d_bn1 = batch_norm(name='d_bn1')
@@ -161,9 +165,19 @@ class DCGAN(object):
     self.saver = tf.train.Saver(max_to_keep=self.max_to_keep)
 
   def train(self, config):
-    d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+    if os.environ.get('TF_ENABLE_AUTO_MIXED_PRECISION', default='0') == '1' or \
+       self.gpu_auto_mixed_precision:
+      print("=============Enabling GPU Automatic Mixed Precision=============")
+      d_optim = tf.train.experimental.enable_mixed_precision_graph_rewrite( \
+          tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1)) \
+          .minimize(self.d_loss, var_list=self.d_vars)
+      g_optim = tf.train.experimental.enable_mixed_precision_graph_rewrite( \
+          tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1)) \
+          .minimize(self.g_loss, var_list=self.g_vars)
+    else:
+      d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
               .minimize(self.d_loss, var_list=self.d_vars)
-    g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+      g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
               .minimize(self.g_loss, var_list=self.g_vars)
     try:
       tf.global_variables_initializer().run()
@@ -217,6 +231,7 @@ class DCGAN(object):
         batch_idxs = min(len(self.data), config.train_size) // config.batch_size
 
       for idx in xrange(0, int(batch_idxs)):
+        batch_start_time = time.time()
         if config.dataset == 'mnist':
           batch_images = self.data_X[idx*config.batch_size:(idx+1)*config.batch_size]
           batch_labels = self.data_y[idx*config.batch_size:(idx+1)*config.batch_size]
@@ -293,9 +308,10 @@ class DCGAN(object):
           errD_real = self.d_loss_real.eval({ self.inputs: batch_images })
           errG = self.g_loss.eval({self.z: batch_z})
 
-        print("[%8d Epoch:[%2d/%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
+        print("[%8d Epoch:[%2d/%2d] [%4d/%4d] time: %4.4f, images/s: %4.4f, d_loss: %.8f, g_loss: %.8f" \
           % (counter, epoch, config.epoch, idx, batch_idxs,
-            time.time() - start_time, errD_fake+errD_real, errG))
+             time.time() - start_time, config.batch_size / (time.time() - batch_start_time),
+             errD_fake+errD_real, errG))
 
         if np.mod(counter, config.sample_freq) == 0:
           if config.dataset == 'mnist':
