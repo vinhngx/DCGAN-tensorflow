@@ -71,14 +71,14 @@ def main(_):
     flags_dict = {k:FLAGS[k].value for k in FLAGS}
     json.dump(flags_dict, f, indent=4, sort_keys=True, ensure_ascii=False)
 
-  if os.environ.get('TF_ENABLE_AUTO_MIXED_PRECISION', default='0') == '1' or FLAGS.gpu_auto_mixed_precision:
-    print("=============Enabling GPU Automatic Mixed Precision Inference=============")
-    tf.train.experimental.enable_mixed_precision_graph_rewrite(tf.train.AdamOptimizer())
-
   #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
   run_config = tf.ConfigProto()
   run_config.gpu_options.allow_growth=True
 
+  if os.environ.get('TF_ENABLE_AUTO_MIXED_PRECISION', default='0') == '1' or FLAGS.gpu_auto_mixed_precision:
+    print("=============Enabling GPU Automatic Mixed Precision Inference=============")
+    run_config.graph_options.rewrite_options.auto_mixed_precision = 1
+    
   with tf.Session(config=run_config) as sess:
     if FLAGS.dataset == 'mnist':
       dcgan = DCGAN(

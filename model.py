@@ -230,8 +230,8 @@ class DCGAN(object):
         np.random.shuffle(self.data)
         batch_idxs = min(len(self.data), config.train_size) // config.batch_size
 
+      epoch_start_time = time.time()
       for idx in xrange(0, int(batch_idxs)):
-        batch_start_time = time.time()
         if config.dataset == 'mnist':
           batch_images = self.data_X[idx*config.batch_size:(idx+1)*config.batch_size]
           batch_labels = self.data_y[idx*config.batch_size:(idx+1)*config.batch_size]
@@ -308,9 +308,9 @@ class DCGAN(object):
           errD_real = self.d_loss_real.eval({ self.inputs: batch_images })
           errG = self.g_loss.eval({self.z: batch_z})
 
-        print("[%8d Epoch:[%2d/%2d] [%4d/%4d] time: %4.4f, images/s: %4.4f, d_loss: %.8f, g_loss: %.8f" \
+        print("[%8d Epoch:[%2d/%2d] [%4d/%4d] time: %4.4f, average images/s: %4.4f, d_loss: %.8f, g_loss: %.8f" \
           % (counter, epoch, config.epoch, idx, batch_idxs,
-             time.time() - start_time, config.batch_size / (time.time() - batch_start_time),
+             time.time() - start_time, idx * config.batch_size / (time.time() - epoch_start_time),
              errD_fake+errD_real, errG))
 
         if np.mod(counter, config.sample_freq) == 0:
